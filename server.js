@@ -91,14 +91,17 @@ wss.on("connection", (ws) => {
       const p = room.players[ws.id];
       if (!p) return;
 
-      if (data.dir === "w" || data.dir === "W") p.y -= SPEED;
-      if (data.dir === "s" || data.dir === "S") p.y += SPEED;
-      if (data.dir === "a" || data.dir === "A") p.x -= SPEED;
-      if (data.dir === "d" || data.dir === "D") p.x += SPEED;
+      const keys = data.keys || {};
+      if (keys.w) p.y -= SPEED;
+      if (keys.s) p.y += SPEED;
+      if (keys.a) p.x -= SPEED;
+      if (keys.d) p.x += SPEED;
 
+      // Clamp inside canvas
       p.x = Math.max(0, Math.min(580, p.x));
       p.y = Math.max(0, Math.min(380, p.y));
 
+      // Broadcast updated positions
       room.clients.forEach((c) => {
         c.send(
           JSON.stringify({
