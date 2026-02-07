@@ -1,26 +1,64 @@
+// server.js
 const WebSocket = require("ws");
 
 const wss = new WebSocket.Server({ port: 8080 });
-let players = {};
+const rooms = {}; // roomId -> {password, clients: []}
 
 wss.on("connection", (ws) => {
-  const id = Math.random().toString(36).substr(2, 5);
-  players[id] = { x: 100, y: 100 };
-
   ws.on("message", (msg) => {
-    players[id] = JSON.parse(msg);
-    broadcast();
+    let data;
+    try {
+      data = JSON.parse(msg);
+    } catch {
+      return;
+    }
+
+    if (data.type === "host") {
+      // create room
+      const roomId = data.roomId;
+      rooms[roomId] = { password: data.password, clients: [ws] };
+      ws.roomId = roomId;
+      ws.send(JSON.stringify({ type: "hosted", roomId }));
+    }
+
+    if (data.type === "join") {
+      const room = rooms[data.roomId];
+      if (!room) {
+        ws.send(JSON.stringify({ type: "error", msg: "Room not found" }));
+        return;
+      }
+      if (room.password !== data.password) {
+        ws.send(JSON.stringify({ type: "error", msg: "Wrong password" }));
+        return;
+      }
+      room.clients.push(ws);
+      ws.roomId = data.roomId;
+      ws.send(JSON.stringify({ type: "joined" }));
+
+      // notify host of new player
+      room.clients.forEach((c) => {
+        if (c !== ws) c.send(JSON.stringify({ type: "new-player" }));
+      });
+    }
+
+    if (data.type === "position") {
+      const room = rooms[ws.roomId];
+      if (!room) return;
+      // broadcast to everyone else
+      room.clients.forEach((c) => {
+        if (c !== ws)
+          c.send(JSON.stringify({ type: "position", pos: data.pos }));
+      });
+    }
   });
 
   ws.on("close", () => {
-    delete players[id];
-    broadcast();
+    if (!ws.roomId) return;
+    const room = rooms[ws.roomId];
+    if (!room) return;
+    room.clients = room.clients.filter((c) => c !== ws);
+    if (room.clients.length === 0) delete rooms[ws.roomId];
   });
-
-  function broadcast() {
-    const data = JSON.stringify(players);
-    wss.clients.forEach((c) => c.readyState === 1 && c.send(data));
-  }
 });
 
-console.log("Server running on ws://localhost:8080");
+console.log("WebSocket server running on port 8080");
