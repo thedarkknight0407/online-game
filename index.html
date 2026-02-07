@@ -13,122 +13,18 @@
   </head>
   <body>
     <h1>P2P Co-op Game Demo</h1>
-    <button id="createRoom">Create Room</button>
-    <input type="text" id="joinRoomID" placeholder="Room ID" />
-    <button id="joinRoom">Join Room</button>
+
+    <div>
+      <input type="text" id="roomPassword" placeholder="Password" />
+      <button id="createRoom">Create Room</button>
+      <input type="text" id="joinRoomID" placeholder="Room ID" />
+      <button id="joinRoom">Join Room</button>
+    </div>
+
     <h3>Room ID: <span id="roomIDDisplay">None</span></h3>
+
     <canvas id="gameCanvas" width="500" height="400"></canvas>
-    <script>
-      // Initialize Gun with public relay
-      const gun = Gun({
-        peers: ["https://gun-manhattan.herokuapp.com/gun"],
-      });
 
-      const canvas = document.getElementById("gameCanvas");
-      const ctx = canvas.getContext("2d");
-
-      let roomID = null;
-      let room = null;
-      let playerID = Math.random().toString(36).substr(2, 5);
-
-      // Game state
-      let players = {}; // { playerID: {x, y, color} }
-
-      // Utilities
-      function generateRoomID(length = 6) {
-        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        let id = "";
-        for (let i = 0; i < length; i++) {
-          id += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return id;
-      }
-
-      // DOM
-      const roomDisplay = document.getElementById("roomIDDisplay");
-      const createRoomBtn = document.getElementById("createRoom");
-      const joinRoomBtn = document.getElementById("joinRoom");
-      const joinRoomInput = document.getElementById("joinRoomID");
-
-      // Create Room
-      createRoomBtn.addEventListener("click", () => {
-        roomID = generateRoomID();
-        roomDisplay.textContent = roomID;
-        room = gun.get(roomID);
-
-        initRoom();
-        console.log("Room created:", roomID);
-      });
-
-      // Join Room
-      joinRoomBtn.addEventListener("click", () => {
-        const inputID = joinRoomInput.value.trim().toUpperCase();
-        if (!inputID) return alert("Enter Room ID");
-        roomID = inputID;
-        roomDisplay.textContent = roomID;
-        room = gun.get(roomID);
-
-        initRoom();
-        console.log("Joined room:", roomID);
-      });
-
-      // Initialize room
-      function initRoom() {
-        // Create this player's state
-        players[playerID] = {
-          x: Math.random() * 450,
-          y: Math.random() * 350,
-          color: getRandomColor(),
-        };
-
-        // Listen for changes in Gun
-        room
-          .get("players")
-          .map()
-          .on((data, key) => {
-            if (data) players[key] = data;
-            else delete players[key];
-          });
-
-        // Save this player's state continuously
-        setInterval(() => {
-          room.get("players").get(playerID).put(players[playerID]);
-        }, 50);
-
-        // Start game loop
-        requestAnimationFrame(gameLoop);
-      }
-
-      // Game loop
-      function gameLoop() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        for (let id in players) {
-          const p = players[id];
-          ctx.fillStyle = p.color;
-          ctx.fillRect(p.x, p.y, 30, 30);
-        }
-
-        requestAnimationFrame(gameLoop);
-      }
-
-      // Player controls
-      document.addEventListener("keydown", (e) => {
-        const speed = 5;
-        if (e.key === "ArrowUp") players[playerID].y -= speed;
-        if (e.key === "ArrowDown") players[playerID].y += speed;
-        if (e.key === "ArrowLeft") players[playerID].x -= speed;
-        if (e.key === "ArrowRight") players[playerID].x += speed;
-      });
-
-      // Random color
-      function getRandomColor() {
-        const letters = "0123456789ABCDEF";
-        let color = "#";
-        for (let i = 0; i < 6; i++)
-          color += letters[Math.floor(Math.random() * 16)];
-        return color;
-      }
-    </script>
+    <script src="app.js"></script>
   </body>
 </html>
