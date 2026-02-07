@@ -35,13 +35,6 @@
     <canvas id="c" width="600" height="400" style="display: none"></canvas>
 
     <script>
-      // Game logic
-      // Ingredients on the map
-      let ingredients = [];
-
-      // Orders (simple)
-      let orders = [];
-
       const c = document.getElementById("c");
       const ctx = c.getContext("2d");
       const info = document.getElementById("info");
@@ -106,26 +99,10 @@
 
         if (data.type === "state") {
           players = data.players;
-          ingredients = data.gameState.ingredients;
-          orders = data.gameState.orders;
           if (c.style.display === "none") startGame(); // auto-start when state received
         }
 
         if (data.type === "error") alert(data.msg);
-      }
-
-      function checkPickIngredients() {
-        for (const ing of ingredients) {
-          if (!ing.pickedBy && collides(players[myId], ing)) {
-            ws.send(
-              JSON.stringify({
-                type: "pick",
-                ingredientId: ing.id,
-                playerId: myId,
-              }),
-            );
-          }
-        }
       }
 
       function startGame() {
@@ -164,17 +141,6 @@
 
       // Render loop
       function loop() {
-        // Draw orders
-        ctx.fillStyle = "white";
-        ctx.font = "16px sans-serif";
-        orders.forEach((o, i) => {
-          ctx.fillText(
-            `Order ${o.id}: ${o.required.join(",")}`,
-            10,
-            20 + i * 20,
-          );
-        });
-
         ctx.clearRect(0, 0, c.width, c.height);
         for (const id in players) {
           const p = players[id];
@@ -188,32 +154,6 @@
           ctx.fillStyle = id === myId ? "hotpink" : p.color;
           ctx.fillRect(p.displayX, p.displayY, 20, 20);
         }
-
-        // Draw ingredients
-        for (const ing of ingredients) {
-          ctx.fillStyle = ing.pickedBy
-            ? players[ing.pickedBy]?.color || "gray"
-            : "orange";
-          ctx.fillRect(ing.x, ing.y, 20, 20);
-        }
-
-        // Check picking up ingredients
-        if (players[myId]) {
-          const p = players[myId];
-          for (const ing of ingredients) {
-            if (!ing.pickedBy && collides(p, ing)) {
-              ing.pickedBy = myId;
-            }
-          }
-        }
-
-        // Simple collision check
-        function collides(a, b) {
-          return (
-            a.x < b.x + 20 && a.x + 20 > b.x && a.y < b.y + 20 && a.y + 20 > b.y
-          );
-        }
-        checkPickIngredients();
         requestAnimationFrame(loop);
       }
     </script>
