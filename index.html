@@ -37,17 +37,10 @@
     <script>
       // Game logic
       // Ingredients on the map
-      let ingredients = [
-        { x: 100, y: 100, type: "tomato", pickedBy: null },
-        { x: 200, y: 100, type: "lettuce", pickedBy: null },
-        { x: 300, y: 100, type: "cheese", pickedBy: null },
-      ];
+      let ingredients = [];
 
       // Orders (simple)
-      let orders = [
-        { id: 1, required: ["tomato", "cheese"], delivered: false },
-        { id: 2, required: ["lettuce"], delivered: false },
-      ];
+      let orders = [];
 
       const c = document.getElementById("c");
       const ctx = c.getContext("2d");
@@ -113,10 +106,26 @@
 
         if (data.type === "state") {
           players = data.players;
+          ingredients = data.ingredients;
+          orders = data.orders;
           if (c.style.display === "none") startGame(); // auto-start when state received
         }
 
         if (data.type === "error") alert(data.msg);
+      }
+
+      function checkPickIngredients() {
+        for (const ing of ingredients) {
+          if (!ing.pickedBy && collides(players[myId], ing)) {
+            ws.send(
+              JSON.stringify({
+                type: "pick",
+                ingredientId: ing.id,
+                playerId: myId,
+              }),
+            );
+          }
+        }
       }
 
       function startGame() {
@@ -204,7 +213,7 @@
             a.x < b.x + 20 && a.x + 20 > b.x && a.y < b.y + 20 && a.y + 20 > b.y
           );
         }
-
+        checkPickIngredients();
         requestAnimationFrame(loop);
       }
     </script>

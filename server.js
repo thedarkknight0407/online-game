@@ -27,6 +27,17 @@ wss.on("connection", (ws) => {
         players: {
           [ws.id]: { x: 200, y: 200, role: "host", color: give_color() }, // assign host role
         },
+        gameState: {
+          ingredients: [
+            { id: 1, x: 100, y: 100, type: "tomato", pickedBy: null },
+            { id: 2, x: 200, y: 100, type: "lettuce", pickedBy: null },
+            { id: 3, x: 300, y: 100, type: "cheese", pickedBy: null },
+          ],
+          orders: [
+            { id: 1, required: ["tomato", "cheese"], delivered: false },
+            { id: 2, required: ["lettuce"], delivered: false },
+          ],
+        },
       };
       ws.roomId = data.roomId;
       ws.send(
@@ -112,6 +123,22 @@ wss.on("connection", (ws) => {
       //     }),
       //   );
       // });
+    } else if (data.type === "pick") {
+      const ing = room.gameState.ingredients.find(
+        (i) => i.id === data.ingredientId,
+      );
+      if (ing && !ing.pickedBy) ing.pickedBy = data.playerId;
+      broadcastRoomState(room);
+    } else if (data.type === "drop") {
+      const ing = room.gameState.ingredients.find(
+        (i) => i.id === data.ingredientId,
+      );
+      if (ing && ing.pickedBy === data.playerId) {
+        ing.pickedBy = null;
+        ing.x = data.x; // drop location
+        ing.y = data.y;
+      }
+      broadcastRoomState(room);
     }
   });
 
@@ -165,6 +192,19 @@ function give_color() {
   }
 
   return return_v;
+}
+
+function broadcastRoomState(room) {
+  const msg = JSON.stringify({
+    type: "state",
+    players: room.players,
+    ingredients: room.gameState.ingredients,
+    orders: room.gameState.orders,
+  });
+
+  for (const id in room.players) {
+    room.players[id].conn.send(msg);
+  }
 }
 
 server.listen(8080, () => {
