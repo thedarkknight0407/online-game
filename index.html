@@ -1,225 +1,102 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <title>Co-op Game</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <style>
-      body {
-        background: #111;
-        color: white;
-        text-align: center;
-        font-family: sans-serif;
-      }
-      canvas {
-        background: #222;
-        display: block;
-        margin: 10px auto;
-      }
-      input,
-      button {
-        font-size: 16px;
-        margin: 5px;
-      }
-      #info {
-        color: white;
-        background: rgba(255, 255, 255, 0.1);
-        padding: 10px;
-        border-radius: 8px;
-        width: 320px;
-        margin: 10px auto;
-        font-weight: bold;
-        min-height: 1.2em;
-        user-select: none;
-      }
-    </style>
+    <meta charset="UTF-8" />
+    <title>P2P Game Room with Gun.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
   </head>
   <body>
-    <h2>Stay Together ❤️</h2>
+    <h1>P2P Room Demo</h1>
 
-    <div id="menu">
-      <input
-        id="room"
-        placeholder="Room code (leave empty to host new)"
-        autocomplete="off"
-      /><br />
-      <input
-        id="password"
-        type="password"
-        placeholder="Password (required)"
-      /><br />
-      <button onclick="host()">Host</button>
-      <button onclick="join()">Join</button>
-      <p id="info"></p>
+    <div>
+      <button id="createRoom">Create Room</button>
+      <input type="text" id="joinRoomID" placeholder="Room ID" />
+      <button id="joinRoom">Join Room</button>
     </div>
 
-    <canvas id="c" width="600" height="400" style="display: none"></canvas>
+    <h3>Room ID: <span id="roomIDDisplay">None</span></h3>
+
+    <input type="text" id="messageInput" placeholder="Type a message" />
+    <button id="sendMessage">Send</button>
+
+    <ul id="chat"></ul>
 
     <script>
-      const c = document.getElementById("c");
-      const ctx = c.getContext("2d");
+      // Initialize Gun (P2P)
+      const gun = Gun(); // Works fully P2P
 
-      let peer, conn;
-      let me = { x: 200, y: 200 };
-      let other = { x: 350, y: 200 };
+      let roomID = null;
+      let room = null;
 
-      const info = document.getElementById("info");
-
-      function showMessage(text, type = "info", duration = 5000) {
-        const colors = {
-          info: "white",
-          success: "lightgreen",
-          error: "lightcoral",
-          warning: "orange",
-        };
-        info.style.color = colors[type] || colors.info;
-        info.textContent = text;
-        if (duration > 0) {
-          clearTimeout(info._timeout);
-          info._timeout = setTimeout(() => {
-            info.textContent = "";
-          }, duration);
-        }
-      }
-
-      function randomId(length = 4) {
-        const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-        let res = "";
+      // Utilities
+      function generateRoomID(length = 6) {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let id = "";
         for (let i = 0; i < length; i++) {
-          res += chars.charAt(Math.floor(Math.random() * chars.length));
+          id += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-        return res;
+        return id;
       }
 
-      // Create peer with STUN + TURN servers
-      function createPeer(id) {
-        return new Peer(id, {
-          debug: 2,
-          config: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" },
-              {
-                urls: "turn:numb.viagenie.ca",
-                username: "demo",
-                credential: "demo",
-              },
-            ],
-          },
-        });
-      }
+      // DOM Elements
+      const roomDisplay = document.getElementById("roomIDDisplay");
+      const chatList = document.getElementById("chat");
+      const messageInput = document.getElementById("messageInput");
 
-      function host() {
-        const password = document.getElementById("password").value.trim();
-        if (!password) {
-          showMessage("Password required to host", "error");
-          return;
-        }
-        const roomId = randomId();
-        peer = createPeer(roomId);
-        peer.on("open", (id) => {
-          showMessage(
-            `Room code: ${id} | Password: (hidden)`,
-            "success",
-            10000,
-          );
-          document.getElementById("room").value = id;
-        });
-        peer.on("connection", (c) => {
-          c.on("open", () => {
-            c.on("data", (data) => {
-              if (typeof data === "string" && data.startsWith("PWD:")) {
-                const passAttempt = data.slice(4);
-                if (passAttempt === password) {
-                  conn = c;
-                  c.send("PWD:ACCEPT");
-                  start();
-                } else {
-                  c.send("PWD:REJECT");
-                  c.close();
-                  showMessage(
-                    "Rejected connection: wrong password",
-                    "error",
-                    0,
-                  );
-                }
-              }
-            });
+      // Create Room
+      document.getElementById("createRoom").addEventListener("click", () => {
+        roomID = generateRoomID();
+        roomDisplay.textContent = roomID;
+        room = gun.get(roomID);
+        console.log("Room created:", roomID);
+
+        // Listen to messages
+        room
+          .get("messages")
+          .map()
+          .on((msg) => {
+            if (msg) addMessage(msg);
           });
-        });
-        peer.on("error", (err) => {
-          showMessage("Peer error: " + err, "error", 0);
-        });
-      }
+      });
 
-      function join() {
-        const roomId = document
-          .getElementById("room")
+      // Join Room
+      document.getElementById("joinRoom").addEventListener("click", () => {
+        const inputID = document
+          .getElementById("joinRoomID")
           .value.trim()
           .toUpperCase();
-        const password = document.getElementById("password").value.trim();
-        if (!roomId || !password) {
-          showMessage("Room code and password required", "error");
-          return;
-        }
-        peer = createPeer();
-        peer.on("open", () => {
-          conn = peer.connect(roomId);
-          conn.on("open", () => {
-            conn.send("PWD:" + password);
+        if (!inputID) return alert("Enter Room ID");
+
+        roomID = inputID;
+        roomDisplay.textContent = roomID;
+        room = gun.get(roomID);
+
+        // Listen to messages
+        room
+          .get("messages")
+          .map()
+          .on((msg) => {
+            if (msg) addMessage(msg);
           });
-          conn.on("data", (data) => {
-            if (data === "PWD:ACCEPT") {
-              showMessage("Password accepted. Connected!", "success");
-              start();
-            } else if (data === "PWD:REJECT") {
-              showMessage("Wrong password. Connection closed.", "error", 0);
-              conn.close();
-            } else {
-              try {
-                const parsed = JSON.parse(data);
-                if (typeof parsed === "object") other = parsed;
-              } catch {}
-            }
-          });
-        });
-        peer.on("error", (err) => {
-          showMessage("Peer error: " + err, "error", 0);
-        });
-      }
 
-      function start() {
-        document.getElementById("menu").style.display = "none";
-        c.style.display = "block";
-        conn.on("data", (data) => {
-          if (typeof data === "string" && data.startsWith("PWD:")) return;
-          try {
-            const parsed = JSON.parse(data);
-            if (typeof parsed === "object") other = parsed;
-          } catch {}
-        });
-        loop();
-      }
+        console.log("Joined room:", roomID);
+      });
 
-      document.onkeydown = (e) => {
-        if (!conn || !conn.open) return;
-        if (["w", "a", "s", "d"].includes(e.key.toLowerCase())) {
-          if (e.key.toLowerCase() === "w") me.y -= 5;
-          if (e.key.toLowerCase() === "s") me.y += 5;
-          if (e.key.toLowerCase() === "a") me.x -= 5;
-          if (e.key.toLowerCase() === "d") me.x += 5;
-          me.x = Math.min(Math.max(me.x, 0), c.width - 20);
-          me.y = Math.min(Math.max(me.y, 0), c.height - 20);
-          conn.send(JSON.stringify(me));
-        }
-      };
+      // Send Message
+      document.getElementById("sendMessage").addEventListener("click", () => {
+        const text = messageInput.value.trim();
+        if (!text || !room) return;
 
-      function loop() {
-        ctx.clearRect(0, 0, c.width, c.height);
-        ctx.fillStyle = "hotpink";
-        ctx.fillRect(me.x, me.y, 20, 20);
-        ctx.fillStyle = "cyan";
-        ctx.fillRect(other.x, other.y, 20, 20);
-        requestAnimationFrame(loop);
+        // Save message to Gun
+        room.get("messages").set(text);
+        messageInput.value = "";
+      });
+
+      // Display message in chat
+      function addMessage(msg) {
+        const li = document.createElement("li");
+        li.textContent = msg;
+        chatList.appendChild(li);
       }
     </script>
   </body>
