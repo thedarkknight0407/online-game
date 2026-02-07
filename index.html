@@ -57,10 +57,9 @@
 
       function connect() {
         ws = new WebSocket(
-          "ws://preadministrative-na-stirringly.ngrok-free.dev.ngrok.io",
+          "wss://preadministrative-na-stirringly.ngrok-free.dev/",
         );
 
-        // ws = new WebSocket("wss://YOUR_SERVER_ADDRESS:8080"); // replace with your WS server
         ws.onmessage = (msg) => {
           let data;
           try {

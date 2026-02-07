@@ -1,9 +1,14 @@
 // server.js
+const http = require("http");
 const WebSocket = require("ws");
 
-const wss = new WebSocket.Server({ port: 8080 });
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end("WebSocket server running");
+});
 
-const rooms = {}; // roomId -> {password, clients: []}
+const wss = new WebSocket.Server({ server });
+const rooms = {};
 
 wss.on("connection", (ws) => {
   ws.on("message", (msg) => {
@@ -15,51 +20,32 @@ wss.on("connection", (ws) => {
     }
 
     if (data.type === "host") {
-      // create room
-      const roomId = data.roomId;
-      rooms[roomId] = { password: data.password, clients: [ws] };
-      ws.roomId = roomId;
-      ws.send(JSON.stringify({ type: "hosted", roomId }));
+      rooms[data.roomId] = { password: data.password, clients: [ws] };
+      ws.roomId = data.roomId;
+      ws.send(JSON.stringify({ type: "hosted", roomId: data.roomId }));
     }
 
     if (data.type === "join") {
       const room = rooms[data.roomId];
-      if (!room) {
-        ws.send(JSON.stringify({ type: "error", msg: "Room not found" }));
-        return;
-      }
-      if (room.password !== data.password) {
-        ws.send(JSON.stringify({ type: "error", msg: "Wrong password" }));
+      if (!room || room.password !== data.password) {
+        ws.send(
+          JSON.stringify({ type: "error", msg: "Invalid room/password" }),
+        );
         return;
       }
       room.clients.push(ws);
       ws.roomId = data.roomId;
       ws.send(JSON.stringify({ type: "joined" }));
-
-      // notify host of new player
-      room.clients.forEach((c) => {
-        if (c !== ws) c.send(JSON.stringify({ type: "new-player" }));
-      });
     }
 
     if (data.type === "position") {
       const room = rooms[ws.roomId];
       if (!room) return;
-      // broadcast to everyone else
-      room.clients.forEach((c) => {
-        if (c !== ws)
-          c.send(JSON.stringify({ type: "position", pos: data.pos }));
-      });
+      room.clients.forEach((c) => c !== ws && c.send(JSON.stringify(data)));
     }
-  });
-
-  ws.on("close", () => {
-    if (!ws.roomId) return;
-    const room = rooms[ws.roomId];
-    if (!room) return;
-    room.clients = room.clients.filter((c) => c !== ws);
-    if (room.clients.length === 0) delete rooms[ws.roomId];
   });
 });
 
-console.log("WebSocket server running on port 8080");
+server.listen(8080, () => {
+  console.log("HTTP + WebSocket server running on port 8080");
+});
