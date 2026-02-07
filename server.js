@@ -2,6 +2,7 @@
 const WebSocket = require("ws");
 
 const wss = new WebSocket.Server({ port: 8080 });
+
 const rooms = {}; // roomId -> {password, clients: []}
 
 wss.on("connection", (ws) => {
