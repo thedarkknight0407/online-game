@@ -24,7 +24,7 @@ wss.on("connection", (ws) => {
         password: data.password,
         clients: [ws],
         players: {
-          [ws.id]: { x: 200, y: 200, role: "host" }, // assign host role
+          [ws.id]: { x: 200, y: 200, role: "host", color: give_color() }, // assign host role
         },
       };
       ws.roomId = data.roomId;
@@ -58,7 +58,12 @@ wss.on("connection", (ws) => {
       }
 
       room.clients.push(ws);
-      room.players[ws.id] = { x: 350, y: 200, role: "guest" }; // assign guest role
+      room.players[ws.id] = {
+        x: 350,
+        y: 200,
+        role: "guest",
+        color: give_color(),
+      }; // assign guest role
       ws.roomId = data.roomId;
 
       ws.send(
@@ -124,6 +129,16 @@ wss.on("connection", (ws) => {
     }
   });
 });
+
+function give_color() {
+  const letter = "0123456ABCDEF";
+  return_v = "#";
+  for (let i = 0; i < 6; i++) {
+    return_v += letter.charAt(Math.floor(Math.random() * letter.length));
+  }
+
+  return return_v;
+}
 
 server.listen(8080, () => {
   console.log("Server running on port 8080");
