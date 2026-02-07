@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <body>
+    <canvas id="c" width="600" height="400"></canvas>
+    <script>
+      const ws = new WebSocket("ws://192.168.1.5:8080");
+      const ctx = c.getContext("2d");
+      let me = { x: 200, y: 200 };
+      let players = {};
+
+      ws.onmessage = (e) => (players = JSON.parse(e.data));
+
+      document.onkeydown = (e) => {
+        if (e.key === "w") me.y -= 5;
+        if (e.key === "s") me.y += 5;
+        if (e.key === "a") me.x -= 5;
+        if (e.key === "d") me.x += 5;
+        ws.send(JSON.stringify(me));
+      };
+
+      function loop() {
+        ctx.clearRect(0, 0, 600, 400);
+        Object.values(players).forEach((p) => {
+          ctx.fillRect(p.x, p.y, 20, 20);
+        });
+        requestAnimationFrame(loop);
+      }
+      loop();
+    </script>
+  </body>
+</html>
