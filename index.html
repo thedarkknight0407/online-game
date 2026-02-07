@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Online Co-Op</title>
+    <title>Online Co-Op with Password</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
@@ -27,9 +27,19 @@
     <h2>Stay Together ❤️</h2>
 
     <div id="menu">
-      <button onclick="host()">Host</button><br />
-      <input id="room" placeholder="Room code" />
+      <input
+        id="room"
+        placeholder="Room code (leave empty to host new)"
+        autocomplete="off"
+      /><br />
+      <input
+        id="password"
+        type="password"
+        placeholder="Password (required)"
+      /><br />
+      <button onclick="host()">Host</button>
       <button onclick="join()">Join</button>
+      <p id="info" style="color: lightcoral"></p>
     </div>
 
     <canvas id="c" width="600" height="400" style="display: none"></canvas>
@@ -42,23 +52,99 @@
       let me = { x: 200, y: 200 };
       let other = { x: 350, y: 200 };
 
+      const info = document.getElementById("info");
+
+      function randomId(length = 4) {
+        const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // avoid confusing letters
+        let result = "";
+        for (let i = 0; i < length; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      }
+
+      // Create peer with custom short id
+      function createPeer(id) {
+        return new Peer(id, {
+          debug: 2,
+          config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] },
+        });
+      }
+
       function host() {
-        peer = new Peer();
+        const password = document.getElementById("password").value.trim();
+        if (!password) {
+          info.textContent = "Password required to host";
+          return;
+        }
+        const roomId = randomId();
+        peer = createPeer(roomId);
         peer.on("open", (id) => {
-          alert("Room code: " + id);
+          info.style.color = "lightgreen";
+          info.textContent = `Room code: ${id} | Password: (hidden)`;
+          document.getElementById("room").value = id; // autofill join box with room code
         });
         peer.on("connection", (c) => {
-          conn = c;
-          start();
+          c.on("open", () => {
+            // Wait for password from joiner
+            c.on("data", (data) => {
+              if (typeof data === "string" && data.startsWith("PWD:")) {
+                const passAttempt = data.slice(4);
+                if (passAttempt === password) {
+                  conn = c;
+                  c.send("PWD:ACCEPT");
+                  start();
+                } else {
+                  c.send("PWD:REJECT");
+                  c.close();
+                  info.style.color = "lightcoral";
+                  info.textContent = "Rejected connection: wrong password";
+                }
+              }
+            });
+          });
         });
       }
 
       function join() {
-        const id = document.getElementById("room").value;
-        peer = new Peer();
+        const roomId = document
+          .getElementById("room")
+          .value.trim()
+          .toUpperCase();
+        const password = document.getElementById("password").value.trim();
+        if (!roomId || !password) {
+          info.style.color = "lightcoral";
+          info.textContent = "Room code and password required to join";
+          return;
+        }
+        peer = createPeer();
         peer.on("open", () => {
-          conn = peer.connect(id);
-          conn.on("open", start);
+          conn = peer.connect(roomId);
+          conn.on("open", () => {
+            // Send password to host
+            conn.send("PWD:" + password);
+          });
+          conn.on("data", (data) => {
+            if (data === "PWD:ACCEPT") {
+              info.style.color = "lightgreen";
+              info.textContent = "Password accepted. Connected!";
+              start();
+            } else if (data === "PWD:REJECT") {
+              info.style.color = "lightcoral";
+              info.textContent = "Wrong password. Connection closed.";
+              conn.close();
+            } else {
+              // game data
+              try {
+                const parsed = JSON.parse(data);
+                if (typeof parsed === "object") other = parsed;
+              } catch {}
+            }
+          });
+        });
+        peer.on("error", (err) => {
+          info.style.color = "lightcoral";
+          info.textContent = "Error: " + err;
         });
       }
 
@@ -66,21 +152,36 @@
         document.getElementById("menu").style.display = "none";
         c.style.display = "block";
 
-        conn.on("data", (data) => (other = data));
+        conn.on("data", (data) => {
+          // Ignore password messages here
+          if (typeof data === "string" && data.startsWith("PWD:")) return;
+          try {
+            const parsed = JSON.parse(data);
+            if (typeof parsed === "object") other = parsed;
+          } catch {}
+        });
+
         loop();
       }
 
       document.onkeydown = (e) => {
         if (!conn || !conn.open) return;
-        if (e.key === "w") me.y -= 5;
-        if (e.key === "s") me.y += 5;
-        if (e.key === "a") me.x -= 5;
-        if (e.key === "d") me.x += 5;
-        conn.send(me);
+        if (["w", "a", "s", "d"].includes(e.key.toLowerCase())) {
+          if (e.key.toLowerCase() === "w") me.y -= 5;
+          if (e.key.toLowerCase() === "s") me.y += 5;
+          if (e.key.toLowerCase() === "a") me.x -= 5;
+          if (e.key.toLowerCase() === "d") me.x += 5;
+
+          // Clamp inside canvas
+          me.x = Math.min(Math.max(me.x, 0), c.width - 20);
+          me.y = Math.min(Math.max(me.y, 0), c.height - 20);
+
+          conn.send(JSON.stringify(me));
+        }
       };
 
       function loop() {
-        ctx.clearRect(0, 0, 600, 400);
+        ctx.clearRect(0, 0, c.width, c.height);
         ctx.fillStyle = "hotpink";
         ctx.fillRect(me.x, me.y, 20, 20);
         ctx.fillStyle = "cyan";
