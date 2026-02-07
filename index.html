@@ -46,7 +46,7 @@
         const p = new URLSearchParams(location.search);
         const url = p.get("server");
         if (!url) {
-          alert("Open like: index.html?server=wss://YOUR_NGROK_URL");
+          alert("Open like: github.io/.../?server=wss://YOUR_NGROK_URL");
           throw new Error("No server url");
         }
         return url;
@@ -103,11 +103,14 @@
       function onMessage(e) {
         const data = JSON.parse(e.data);
 
-        if (data.type === "hosted" || data.type === "joined") {
+        if (data.type === "hosted") {
           myId = data.id;
-          document.getElementById("menu").style.display = "none";
-          c.style.display = "block";
-          loop();
+          // stay in menu, just wait
+        }
+
+        if (data.type === "joined") {
+          myId = data.id;
+          startGame();
         }
 
         if (data.type === "state") {
@@ -130,6 +133,12 @@
           );
         }
       });
+
+      function startGame() {
+        document.getElementById("menu").style.display = "none";
+        c.style.display = "block";
+        loop();
+      }
 
       function loop() {
         ctx.clearRect(0, 0, c.width, c.height);
