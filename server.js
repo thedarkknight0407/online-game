@@ -18,13 +18,13 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // HOST ROOM
+    // HOST
     if (data.type === "host") {
       rooms[data.roomId] = {
         password: data.password,
         clients: [ws],
         players: {
-          [ws.id]: { x: 200, y: 200 },
+          [ws.id]: { x: 200, y: 200, role: "host" }, // assign host role
         },
       };
       ws.roomId = data.roomId;
@@ -35,6 +35,7 @@ wss.on("connection", (ws) => {
         }),
       );
 
+      // send initial state
       ws.send(
         JSON.stringify({
           type: "state",
@@ -43,7 +44,7 @@ wss.on("connection", (ws) => {
       );
     }
 
-    // JOIN ROOM
+    // JOIN
     if (data.type === "join") {
       const room = rooms[data.roomId];
       if (!room || room.password !== data.password) {
@@ -55,9 +56,11 @@ wss.on("connection", (ws) => {
         );
         return;
       }
+
       room.clients.push(ws);
-      room.players[ws.id] = { x: 350, y: 200 };
+      room.players[ws.id] = { x: 350, y: 200, role: "guest" }; // assign guest role
       ws.roomId = data.roomId;
+
       ws.send(
         JSON.stringify({
           type: "joined",
@@ -65,21 +68,21 @@ wss.on("connection", (ws) => {
         }),
       );
 
-      room.clients.forEach((c) =>
+      // broadcast updated state to everyone
+      room.clients.forEach((c) => {
         c.send(
           JSON.stringify({
             type: "state",
             players: room.players,
           }),
-        ),
-      );
+        );
+      });
     }
 
     // INPUT
     if (data.type === "input") {
       const room = rooms[ws.roomId];
       if (!room) return;
-
       const p = room.players[ws.id];
       if (!p) return;
 
@@ -91,14 +94,14 @@ wss.on("connection", (ws) => {
       p.x = Math.max(0, Math.min(580, p.x));
       p.y = Math.max(0, Math.min(380, p.y));
 
-      room.clients.forEach((c) =>
+      room.clients.forEach((c) => {
         c.send(
           JSON.stringify({
             type: "state",
             players: room.players,
           }),
-        ),
-      );
+        );
+      });
     }
   });
 
@@ -108,6 +111,17 @@ wss.on("connection", (ws) => {
     delete room.players[ws.id];
     room.clients = room.clients.filter((c) => c !== ws);
     if (room.clients.length === 0) delete rooms[ws.roomId];
+    else {
+      // update remaining clients
+      room.clients.forEach((c) => {
+        c.send(
+          JSON.stringify({
+            type: "state",
+            players: room.players,
+          }),
+        );
+      });
+    }
   });
 });
 

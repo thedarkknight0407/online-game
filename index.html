@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Co-op Test</title>
+    <title>Co-op Game with Roles</title>
     <style>
       body {
         background: #111;
@@ -23,7 +23,7 @@
     </style>
   </head>
   <body>
-    <h2>Co-op Test</h2>
+    <h2>Co-op Game</h2>
 
     <div id="menu">
       <input id="room" placeholder="Room code" /><br />
@@ -42,12 +42,12 @@
       let players = {};
       let myId = null;
 
+      // Helper to get server URL from query
       function getServerURL() {
-        const p = new URLSearchParams(location.search);
-        const url = p.get("server");
+        const url = new URLSearchParams(location.search).get("server");
         if (!url) {
-          alert("Open like: github.io/.../?server=wss://YOUR_NGROK_URL");
-          throw new Error("No server url");
+          alert("Open like: index.html?server=wss://YOUR_NGROK_URL");
+          throw "";
         }
         return url;
       }
@@ -57,41 +57,30 @@
       }
 
       function host() {
-        const password = passwordInput();
+        const password = getPassword();
         const roomId = randomRoom();
         document.getElementById("room").value = roomId;
+        alert("Room code: " + roomId + "\nShare this with your friend");
 
         ws = new WebSocket(getServerURL());
         ws.onopen = () => {
-          ws.send(
-            JSON.stringify({
-              type: "host",
-              roomId,
-              password,
-            }),
-          );
+          ws.send(JSON.stringify({ type: "host", roomId, password }));
         };
         ws.onmessage = onMessage;
       }
 
       function join() {
         const roomId = document.getElementById("room").value.trim();
-        const password = passwordInput();
+        const password = getPassword();
 
         ws = new WebSocket(getServerURL());
         ws.onopen = () => {
-          ws.send(
-            JSON.stringify({
-              type: "join",
-              roomId,
-              password,
-            }),
-          );
+          ws.send(JSON.stringify({ type: "join", roomId, password }));
         };
         ws.onmessage = onMessage;
       }
 
-      function passwordInput() {
+      function getPassword() {
         const p = document.getElementById("password").value.trim();
         if (!p) {
           alert("Password required");
@@ -100,39 +89,20 @@
         return p;
       }
 
+      // Handle incoming messages
       function onMessage(e) {
         const data = JSON.parse(e.data);
 
-        if (data.type === "hosted") {
-          myId = data.id;
-          // stay in menu, just wait
-        }
-
-        if (data.type === "joined") {
-          myId = data.id;
-          startGame();
-        }
+        if (data.type === "hosted") myId = data.id;
+        if (data.type === "joined") myId = data.id;
 
         if (data.type === "state") {
           players = data.players;
+          if (c.style.display === "none") startGame(); // auto-start when state received
         }
 
-        if (data.type === "error") {
-          alert(data.msg);
-        }
+        if (data.type === "error") alert(data.msg);
       }
-
-      document.addEventListener("keydown", (e) => {
-        if (!ws || ws.readyState !== 1) return;
-        if ("wasd".includes(e.key)) {
-          ws.send(
-            JSON.stringify({
-              type: "input",
-              dir: e.key,
-            }),
-          );
-        }
-      });
 
       function startGame() {
         document.getElementById("menu").style.display = "none";
@@ -140,11 +110,26 @@
         loop();
       }
 
+      // Keyboard input
+      document.addEventListener("keydown", (e) => {
+        if (!ws || ws.readyState !== 1) return;
+        if ("wasd".includes(e.key)) {
+          ws.send(JSON.stringify({ type: "input", dir: e.key }));
+        }
+      });
+
+      // Render loop
       function loop() {
         ctx.clearRect(0, 0, c.width, c.height);
         for (const id in players) {
           const p = players[id];
-          ctx.fillStyle = id === myId ? "hotpink" : "cyan";
+          if (id === myId)
+            ctx.fillStyle = "hotpink"; // you
+          else if (p.role === "host")
+            ctx.fillStyle = "cyan"; // host
+          else if (p.role === "guest")
+            ctx.fillStyle = "lightgreen"; // guest
+          else ctx.fillStyle = "white"; // future players
           ctx.fillRect(p.x, p.y, 20, 20);
         }
         requestAnimationFrame(loop);
