@@ -92,25 +92,26 @@ wss.on("connection", (ws) => {
       const p = room.players[ws.id];
       if (!p) return;
 
-      const keys = data.keys || {};
-      if (keys.w) p.y -= SPEED;
-      if (keys.s) p.y += SPEED;
-      if (keys.a) p.x -= SPEED;
-      if (keys.d) p.x += SPEED;
+      p.keys = data.keys || {};
+      // const keys = data.keys || {};
+      // if (keys.w) p.y -= SPEED;
+      // if (keys.s) p.y += SPEED;
+      // if (keys.a) p.x -= SPEED;
+      // if (keys.d) p.x += SPEED;
 
-      // Clamp inside canvas
-      p.x = Math.max(0, Math.min(580, p.x));
-      p.y = Math.max(0, Math.min(380, p.y));
+      // // Clamp inside canvas
+      // p.x = Math.max(0, Math.min(580, p.x));
+      // p.y = Math.max(0, Math.min(380, p.y));
 
-      // Broadcast updated positions
-      room.clients.forEach((c) => {
-        c.send(
-          JSON.stringify({
-            type: "state",
-            players: room.players,
-          }),
-        );
-      });
+      // // Broadcast updated positions
+      // room.clients.forEach((c) => {
+      //   c.send(
+      //     JSON.stringify({
+      //       type: "state",
+      //       players: room.players,
+      //     }),
+      //   );
+      // });
     }
   });
 
@@ -120,17 +121,17 @@ wss.on("connection", (ws) => {
     delete room.players[ws.id];
     room.clients = room.clients.filter((c) => c !== ws);
     if (room.clients.length === 0) delete rooms[ws.roomId];
-    else {
-      // update remaining clients
-      room.clients.forEach((c) => {
-        c.send(
-          JSON.stringify({
-            type: "state",
-            players: room.players,
-          }),
-        );
-      });
-    }
+    // else {
+    //   // update remaining clients
+    //   room.clients.forEach((c) => {
+    //     c.send(
+    //       JSON.stringify({
+    //         type: "state",
+    //         players: room.players,
+    //       }),
+    //     );
+    //   });
+    // }
   });
 });
 
