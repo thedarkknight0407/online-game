@@ -34,6 +34,13 @@ wss.on("connection", (ws) => {
           id: ws.id,
         }),
       );
+
+      ws.send(
+        JSON.stringify({
+          type: "state",
+          players: rooms[data.roomId].players,
+        }),
+      );
     }
 
     // JOIN ROOM
@@ -56,6 +63,15 @@ wss.on("connection", (ws) => {
           type: "joined",
           id: ws.id,
         }),
+      );
+
+      room.clients.forEach((c) =>
+        c.send(
+          JSON.stringify({
+            type: "state",
+            players: room.players,
+          }),
+        ),
       );
     }
 
