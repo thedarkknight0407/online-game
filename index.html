@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <title>P2P Co-op Game</title>
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <style>
       canvas {
         border: 1px solid black;
@@ -12,7 +11,7 @@
     </style>
   </head>
   <body>
-    <h1>P2P Co-op Game Demo</h1>
+    <h1>P2P Co-op Game</h1>
 
     <div>
       <input type="text" id="roomPassword" placeholder="Password" />
@@ -25,6 +24,7 @@
 
     <canvas id="gameCanvas" width="500" height="400"></canvas>
 
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
