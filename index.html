@@ -128,11 +128,21 @@
           else if (p.role === "host")
             ctx.fillStyle = "cyan"; // host
           else if (p.role === "guest")
-            ctx.fillStyle = "lightgreen"; // guest
+            ctx.fillStyle = give_color(); // guest
           else ctx.fillStyle = "white"; // future players
           ctx.fillRect(p.x, p.y, 20, 20);
         }
         requestAnimationFrame(loop);
+      }
+
+      function give_color() {
+        const letter = "0123456ABCDEF";
+        return_v = "#";
+        for (let i = 0; i < 6; i++) {
+          return_v += letter.charAt(Math.floor(Math.random() * letter.length));
+        }
+
+        return return_v;
       }
     </script>
   </body>
