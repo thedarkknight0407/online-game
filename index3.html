@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Co-op Game</title>
+    <title>Online Co-Op with Password</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
@@ -20,17 +20,6 @@
       button {
         font-size: 16px;
         margin: 5px;
-      }
-      #info {
-        color: white;
-        background: rgba(255, 255, 255, 0.1);
-        padding: 10px;
-        border-radius: 8px;
-        width: 320px;
-        margin: 10px auto;
-        font-weight: bold;
-        min-height: 1.2em;
-        user-select: none;
       }
     </style>
   </head>
@@ -50,7 +39,20 @@
       /><br />
       <button onclick="host()">Host</button>
       <button onclick="join()">Join</button>
-      <p id="info"></p>
+      <p
+        id="info"
+        style="
+          color: white;
+          background: rgba(255, 255, 255, 0.1);
+          padding: 10px;
+          border-radius: 8px;
+          width: 320px;
+          margin: 10px auto;
+          font-weight: bold;
+          min-height: 1.2em;
+          user-select: none;
+        "
+      ></p>
     </div>
 
     <canvas id="c" width="600" height="400" style="display: none"></canvas>
@@ -64,6 +66,148 @@
       let other = { x: 350, y: 200 };
 
       const info = document.getElementById("info");
+
+      function randomId(length = 4) {
+        const chars = "ABCDEFGHJKMNPQRSTUVWXYZ1023456789"; // avoid confusing letters
+        let result = "";
+        for (let i = 0; i < length; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      }
+
+      // Create peer with custom short id
+      function createPeer(id) {
+        return new Peer(id, {
+          config: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" },
+              {
+                urls: "turn:turn.anyfirewall.com:443?transport=tcp",
+                username: "webrtc",
+                credential: "webrtc",
+              },
+            ],
+          },
+        });
+      }
+
+      function host() {
+        const password = document.getElementById("password").value.trim();
+        if (!password) {
+          showMessage("Password required to host", "error");
+
+          return;
+        }
+        const roomId = randomId();
+        peer = createPeer(roomId);
+        peer.on("open", (id) => {
+          info.style.color = "lightgreen";
+          info.textContent = `Room code: ${id} | Password: (hidden)`;
+          document.getElementById("room").value = id; // autofill join box with room code
+        });
+        peer.on("connection", (c) => {
+          c.on("open", () => {
+            // Wait for password from joiner
+            c.on("data", (data) => {
+              if (typeof data === "string" && data.startsWith("PWD:")) {
+                const passAttempt = data.slice(4);
+                if (passAttempt === password) {
+                  conn = c;
+                  c.send("PWD:ACCEPT");
+                  start();
+                } else {
+                  c.send("PWD:REJECT");
+                  c.close();
+                  showMessage("Password required to host", "error");
+                }
+              }
+            });
+          });
+        });
+      }
+
+      function join() {
+        const roomId = document
+          .getElementById("room")
+          .value.trim()
+          .toUpperCase();
+        const password = document.getElementById("password").value.trim();
+        if (!roomId || !password) {
+          showMessage("Password required to host", "error");
+          return;
+        }
+        peer = createPeer();
+        peer.on("open", () => {
+          conn = peer.connect(roomId);
+          conn.on("open", () => {
+            // Send password to host
+            conn.send("PWD:" + password);
+          });
+          conn.on("data", (data) => {
+            if (data === "PWD:ACCEPT") {
+              info.style.color = "lightgreen";
+              info.textContent = "Password accepted. Connected!";
+              start();
+            } else if (data === "PWD:REJECT") {
+              info.style.color = "lightcoral";
+              info.textContent = "Wrong password. Connection closed.";
+              conn.close();
+            } else {
+              // game data
+              try {
+                const parsed = JSON.parse(data);
+                if (typeof parsed === "object") other = parsed;
+              } catch {}
+            }
+          });
+        });
+        peer.on("error", (err) => {
+          info.style.color = "lightcoral";
+          info.textContent = "Error: " + err;
+        });
+      }
+
+      function start() {
+        document.getElementById("menu").style.display = "none";
+        c.style.display = "block";
+
+        conn.on("data", (data) => {
+          // Ignore password messages here
+          if (typeof data === "string" && data.startsWith("PWD:")) return;
+          try {
+            const parsed = JSON.parse(data);
+            if (typeof parsed === "object") other = parsed;
+          } catch {}
+        });
+
+        loop();
+      }
+
+      document.onkeydown = (e) => {
+        if (!conn || !conn.open) return;
+        if (["w", "a", "s", "d"].includes(e.key.toLowerCase())) {
+          if (e.key.toLowerCase() === "w") me.y -= 5;
+          if (e.key.toLowerCase() === "s") me.y += 5;
+          if (e.key.toLowerCase() === "a") me.x -= 5;
+          if (e.key.toLowerCase() === "d") me.x += 5;
+
+          // Clamp inside canvas
+          me.x = Math.min(Math.max(me.x, 0), c.width - 20);
+          me.y = Math.min(Math.max(me.y, 0), c.height - 20);
+
+          conn.send(JSON.stringify(me));
+        }
+      };
+
+      function loop() {
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.fillStyle = "hotpink";
+        ctx.fillRect(me.x, me.y, 20, 20);
+        ctx.fillStyle = "cyan";
+        ctx.fillRect(other.x, other.y, 20, 20);
+        requestAnimationFrame(loop);
+      }
 
       function showMessage(text, type = "info", duration = 5000) {
         const colors = {
@@ -80,146 +224,6 @@
             info.textContent = "";
           }, duration);
         }
-      }
-
-      function randomId(length = 4) {
-        const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-        let res = "";
-        for (let i = 0; i < length; i++) {
-          res += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return res;
-      }
-
-      // Create peer with STUN + TURN servers
-      function createPeer(id) {
-        return new Peer(id, {
-          debug: 2,
-          config: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" },
-              {
-                urls: "turn:numb.viagenie.ca",
-                username: "demo",
-                credential: "demo",
-              },
-            ],
-          },
-        });
-      }
-
-      function host() {
-        const password = document.getElementById("password").value.trim();
-        if (!password) {
-          showMessage("Password required to host", "error");
-          return;
-        }
-        const roomId = randomId();
-        peer = createPeer(roomId);
-        peer.on("open", (id) => {
-          showMessage(
-            `Room code: ${id} | Password: (hidden)`,
-            "success",
-            10000,
-          );
-          document.getElementById("room").value = id;
-        });
-        peer.on("connection", (c) => {
-          c.on("open", () => {
-            c.on("data", (data) => {
-              if (typeof data === "string" && data.startsWith("PWD:")) {
-                const passAttempt = data.slice(4);
-                if (passAttempt === password) {
-                  conn = c;
-                  c.send("PWD:ACCEPT");
-                  start();
-                } else {
-                  c.send("PWD:REJECT");
-                  c.close();
-                  showMessage(
-                    "Rejected connection: wrong password",
-                    "error",
-                    0,
-                  );
-                }
-              }
-            });
-          });
-        });
-        peer.on("error", (err) => {
-          showMessage("Peer error: " + err, "error", 0);
-        });
-      }
-
-      function join() {
-        const roomId = document
-          .getElementById("room")
-          .value.trim()
-          .toUpperCase();
-        const password = document.getElementById("password").value.trim();
-        if (!roomId || !password) {
-          showMessage("Room code and password required", "error");
-          return;
-        }
-        peer = createPeer();
-        peer.on("open", () => {
-          conn = peer.connect(roomId);
-          conn.on("open", () => {
-            conn.send("PWD:" + password);
-          });
-          conn.on("data", (data) => {
-            if (data === "PWD:ACCEPT") {
-              showMessage("Password accepted. Connected!", "success");
-              start();
-            } else if (data === "PWD:REJECT") {
-              showMessage("Wrong password. Connection closed.", "error", 0);
-              conn.close();
-            } else {
-              try {
-                const parsed = JSON.parse(data);
-                if (typeof parsed === "object") other = parsed;
-              } catch {}
-            }
-          });
-        });
-        peer.on("error", (err) => {
-          showMessage("Peer error: " + err, "error", 0);
-        });
-      }
-
-      function start() {
-        document.getElementById("menu").style.display = "none";
-        c.style.display = "block";
-        conn.on("data", (data) => {
-          if (typeof data === "string" && data.startsWith("PWD:")) return;
-          try {
-            const parsed = JSON.parse(data);
-            if (typeof parsed === "object") other = parsed;
-          } catch {}
-        });
-        loop();
-      }
-
-      document.onkeydown = (e) => {
-        if (!conn || !conn.open) return;
-        if (["w", "a", "s", "d"].includes(e.key.toLowerCase())) {
-          if (e.key.toLowerCase() === "w") me.y -= 5;
-          if (e.key.toLowerCase() === "s") me.y += 5;
-          if (e.key.toLowerCase() === "a") me.x -= 5;
-          if (e.key.toLowerCase() === "d") me.x += 5;
-          me.x = Math.min(Math.max(me.x, 0), c.width - 20);
-          me.y = Math.min(Math.max(me.y, 0), c.height - 20);
-          conn.send(JSON.stringify(me));
-        }
-      };
-
-      function loop() {
-        ctx.clearRect(0, 0, c.width, c.height);
-        ctx.fillStyle = "hotpink";
-        ctx.fillRect(me.x, me.y, 20, 20);
-        ctx.fillStyle = "cyan";
-        ctx.fillRect(other.x, other.y, 20, 20);
-        requestAnimationFrame(loop);
       }
     </script>
   </body>
