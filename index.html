@@ -2,7 +2,8 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Co-Op Together</title>
+    <title>Online Co-Op</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
       body {
         background: #111;
@@ -15,8 +16,8 @@
         display: block;
         margin: 10px auto;
       }
-      button,
-      input {
+      input,
+      button {
         font-size: 16px;
         margin: 5px;
       }
@@ -26,9 +27,8 @@
     <h2>Stay Together ❤️</h2>
 
     <div id="menu">
-      <button onclick="host()">Host</button>
-      <br />
-      <input id="code" placeholder="Room code" />
+      <button onclick="host()">Host</button><br />
+      <input id="room" placeholder="Room code" />
       <button onclick="join()">Join</button>
     </div>
 
@@ -38,72 +38,46 @@
       const c = document.getElementById("c");
       const ctx = c.getContext("2d");
 
-      let pc, channel;
+      let peer, conn;
       let me = { x: 200, y: 200 };
-      let other = { x: 300, y: 200 };
-
-      const signal = new WebSocket("wss://signaling.simplewebrtc.com");
-
-      signal.onmessage = async (e) => {
-        const msg = JSON.parse(e.data);
-        if (!pc) return;
-
-        if (msg.sdp) {
-          await pc.setRemoteDescription(msg.sdp);
-          if (msg.sdp.type === "offer") {
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            signal.send(JSON.stringify({ sdp: pc.localDescription }));
-          }
-        }
-        if (msg.candidate) {
-          await pc.addIceCandidate(msg.candidate);
-        }
-      };
-
-      function setupPC() {
-        pc = new RTCPeerConnection();
-        pc.onicecandidate = (e) => {
-          if (e.candidate)
-            signal.send(JSON.stringify({ candidate: e.candidate }));
-        };
-        pc.ondatachannel = (e) => setupChannel(e.channel);
-      }
-
-      function setupChannel(ch) {
-        channel = ch;
-        channel.onmessage = (e) => (other = JSON.parse(e.data));
-        startGame();
-      }
+      let other = { x: 350, y: 200 };
 
       function host() {
-        setupPC();
-        channel = pc.createDataChannel("game");
-        setupChannel(channel);
-        pc.createOffer().then((o) => {
-          pc.setLocalDescription(o);
-          signal.send(JSON.stringify({ sdp: o }));
+        peer = new Peer();
+        peer.on("open", (id) => {
+          alert("Room code: " + id);
+        });
+        peer.on("connection", (c) => {
+          conn = c;
+          start();
         });
       }
 
       function join() {
-        setupPC();
+        const id = document.getElementById("room").value;
+        peer = new Peer();
+        peer.on("open", () => {
+          conn = peer.connect(id);
+          conn.on("open", start);
+        });
+      }
+
+      function start() {
+        document.getElementById("menu").style.display = "none";
+        c.style.display = "block";
+
+        conn.on("data", (data) => (other = data));
+        loop();
       }
 
       document.onkeydown = (e) => {
-        if (!channel) return;
+        if (!conn || !conn.open) return;
         if (e.key === "w") me.y -= 5;
         if (e.key === "s") me.y += 5;
         if (e.key === "a") me.x -= 5;
         if (e.key === "d") me.x += 5;
-        channel.send(JSON.stringify(me));
+        conn.send(me);
       };
-
-      function startGame() {
-        document.getElementById("menu").style.display = "none";
-        c.style.display = "block";
-        loop();
-      }
 
       function loop() {
         ctx.clearRect(0, 0, 600, 400);
