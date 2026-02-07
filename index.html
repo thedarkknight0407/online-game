@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Co-op Game with Roles</title>
+    <title>2-Player Co-Op</title>
     <style>
       body {
         background: #111;
@@ -23,13 +23,23 @@
     </style>
   </head>
   <body>
-    <h2>Co-op Game</h2>
+    <h2>Co-Op Game ❤️</h2>
 
     <div id="menu">
-      <input id="room" placeholder="Room code" /><br />
+      <input id="room" placeholder="Room code (host auto generates)" /><br />
       <input id="password" type="password" placeholder="Password" /><br />
       <button onclick="host()">Host</button>
       <button onclick="join()">Join</button>
+      <p
+        id="info"
+        style="
+          background: rgba(255, 255, 255, 0.1);
+          padding: 10px;
+          border-radius: 8px;
+          width: 320px;
+          margin: 10px auto;
+        "
+      ></p>
     </div>
 
     <canvas id="c" width="600" height="400" style="display: none"></canvas>
@@ -37,114 +47,114 @@
     <script>
       const c = document.getElementById("c");
       const ctx = c.getContext("2d");
+      const info = document.getElementById("info");
 
       let ws;
+      let myId;
       let players = {};
-      let myId = null;
+      let displayPlayers = {}; // for interpolation
 
-      // Helper to get server URL from query
-      function getServerURL() {
-        const url = new URLSearchParams(location.search).get("server");
-        if (!url) {
-          alert("Open like: index.html?server=wss://YOUR_NGROK_URL");
-          throw "";
-        }
-        return url;
-      }
-
+      // Helpers
       function randomRoom() {
-        return Math.random().toString(36).slice(2, 6).toUpperCase();
+        return Math.random().toString(36).substr(2, 4).toUpperCase();
       }
 
+      // Host room
       function host() {
-        const password = getPassword();
+        const password = document.getElementById("password").value.trim();
+        if (!password) {
+          info.textContent = "Password required";
+          return;
+        }
         const roomId = randomRoom();
-        document.getElementById("room").value = roomId;
-        alert("Room code: " + roomId + "\nShare this with your friend");
-
-        ws = new WebSocket(getServerURL());
+        ws = new WebSocket("ws://localhost:8080");
         ws.onopen = () => {
           ws.send(JSON.stringify({ type: "host", roomId, password }));
         };
-        ws.onmessage = onMessage;
+        ws.onmessage = handleMessage;
       }
 
+      // Join room
       function join() {
-        const roomId = document.getElementById("room").value.trim();
-        const password = getPassword();
-
-        ws = new WebSocket(getServerURL());
+        const roomId = document
+          .getElementById("room")
+          .value.trim()
+          .toUpperCase();
+        const password = document.getElementById("password").value.trim();
+        if (!roomId || !password) {
+          info.textContent = "Room & password required";
+          return;
+        }
+        ws = new WebSocket("ws://localhost:8080");
         ws.onopen = () => {
           ws.send(JSON.stringify({ type: "join", roomId, password }));
         };
-        ws.onmessage = onMessage;
+        ws.onmessage = handleMessage;
       }
 
-      function getPassword() {
-        const p = document.getElementById("password").value.trim();
-        if (!p) {
-          alert("Password required");
-          throw "";
-        }
-        return p;
-      }
-
-      // Handle incoming messages
-      function onMessage(e) {
-        const data = JSON.parse(e.data);
-
-        if (data.type === "hosted") myId = data.id;
-        if (data.type === "joined") myId = data.id;
-
-        if (data.type === "state") {
+      // Handle server messages
+      function handleMessage(evt) {
+        let data = JSON.parse(evt.data);
+        if (data.type === "error") info.textContent = data.msg;
+        else if (data.type === "hostCreated") {
+          info.textContent = `Room code: ${data.roomId} | Password: (hidden)`;
+          myId = "host";
+          start();
+        } else if (data.type === "joined") {
+          info.textContent = "Joined! Waiting for updates...";
+          myId = Object.keys(data.players).find(
+            (id) => data.players[id].role !== "host",
+          ); // guest id
           players = data.players;
-          if (c.style.display === "none") startGame(); // auto-start when state received
+          start();
+        } else if (data.type === "state") {
+          players = data.players;
         }
-
-        if (data.type === "error") alert(data.msg);
       }
 
-      function startGame() {
+      // Start game
+      function start() {
         document.getElementById("menu").style.display = "none";
         c.style.display = "block";
-        loop();
+        requestAnimationFrame(loop);
       }
 
       // Keyboard input
       const keys = { w: 0, a: 0, s: 0, d: 0 };
-
       document.addEventListener("keydown", (e) => {
-        if (!ws || ws.readyState !== 1) return;
         const k = e.key.toLowerCase();
         if (keys.hasOwnProperty(k) && keys[k] === 0) {
           keys[k] = 1;
-          ws.send(JSON.stringify({ type: "input", keys }));
+          sendKeys();
         }
       });
-
       document.addEventListener("keyup", (e) => {
-        if (!ws || ws.readyState !== 1) return;
         const k = e.key.toLowerCase();
         if (keys.hasOwnProperty(k) && keys[k] === 1) {
           keys[k] = 0;
-          ws.send(JSON.stringify({ type: "input", keys }));
+          sendKeys();
         }
       });
 
-      // Render loop
+      function sendKeys() {
+        if (!ws || ws.readyState !== 1) return;
+        ws.send(JSON.stringify({ type: "input", keys }));
+      }
+
+      // Interpolated drawing
       function loop() {
         ctx.clearRect(0, 0, c.width, c.height);
         for (const id in players) {
           const p = players[id];
-          if (!p.displayX) p.displayX = p.x;
-          if (!p.displayY) p.displayY = p.y;
+          if (!displayPlayers[id]) displayPlayers[id] = { x: p.x, y: p.y };
+          const dp = displayPlayers[id];
 
-          const lerp = 0.2; // 0 = no movement, 1 = instant snap
-          p.displayX += (p.x - p.displayX) * lerp;
-          p.displayY += (p.y - p.displayY) * lerp;
+          const lerp = 0.2;
+          dp.x += (p.x - dp.x) * lerp;
+          dp.y += (p.y - dp.y) * lerp;
 
           ctx.fillStyle = id === myId ? "hotpink" : p.color;
-          ctx.fillRect(p.displayX, p.displayY, 20, 20);
+          ctx.fillRect(dp.x, dp.y, 20, 20);
         }
         requestAnimationFrame(loop);
       }
