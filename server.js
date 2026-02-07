@@ -91,6 +91,8 @@ wss.on("connection", (ws) => {
           JSON.stringify({
             type: "state",
             players: room.players,
+            ingredients: room.gameState.ingredients,
+            orders: room.gameState.orders,
           }),
         );
       });
@@ -179,7 +181,14 @@ setInterval(() => {
 
     // Broadcast positions
     room.clients.forEach((c) => {
-      c.send(JSON.stringify({ type: "state", players: room.players }));
+      c.send(
+        JSON.stringify({
+          type: "state",
+          players: room.players,
+          ingredients: room.gameState.ingredients,
+          orders: room.gameState.orders,
+        }),
+      );
     });
   }
 }, 1000 / TICK_RATE);
@@ -201,10 +210,9 @@ function broadcastRoomState(room) {
     ingredients: room.gameState.ingredients,
     orders: room.gameState.orders,
   });
-
-  for (const id in room.players) {
-    room.players[id].conn.send(msg);
-  }
+  room.clients.forEach((c) => {
+    c.send(msg);
+  });
 }
 
 server.listen(8080, () => {

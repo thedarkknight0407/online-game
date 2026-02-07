@@ -106,8 +106,8 @@
 
         if (data.type === "state") {
           players = data.players;
-          ingredients = data.ingredients;
-          orders = data.orders;
+          ingredients = data.gameState.ingredients;
+          orders = data.gameState.orders;
           if (c.style.display === "none") startGame(); // auto-start when state received
         }
 
