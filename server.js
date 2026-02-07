@@ -91,10 +91,10 @@ wss.on("connection", (ws) => {
       const p = room.players[ws.id];
       if (!p) return;
 
-      if (data.dir === "w") p.y -= SPEED;
-      if (data.dir === "s") p.y += SPEED;
-      if (data.dir === "a") p.x -= SPEED;
-      if (data.dir === "d") p.x += SPEED;
+      if (data.dir === "w" || data.dir === "W") p.y -= SPEED;
+      if (data.dir === "s" || data.dir === "S") p.y += SPEED;
+      if (data.dir === "a" || data.dir === "A") p.x -= SPEED;
+      if (data.dir === "d" || data.dir === "D") p.x += SPEED;
 
       p.x = Math.max(0, Math.min(580, p.x));
       p.y = Math.max(0, Math.min(380, p.y));

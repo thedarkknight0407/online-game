@@ -111,10 +111,23 @@
       }
 
       // Keyboard input
+      const keys = { w: 0, a: 0, s: 0, d: 0 };
+
       document.addEventListener("keydown", (e) => {
         if (!ws || ws.readyState !== 1) return;
-        if ("wasd".includes(e.key)) {
-          ws.send(JSON.stringify({ type: "input", dir: e.key }));
+        const k = e.key.toLowerCase();
+        if (keys.hasOwnProperty(k) && keys[k] === 0) {
+          keys[k] = 1;
+          ws.send(JSON.stringify({ type: "input", keys }));
+        }
+      });
+
+      document.addEventListener("keyup", (e) => {
+        if (!ws || ws.readyState !== 1) return;
+        const k = e.key.toLowerCase();
+        if (keys.hasOwnProperty(k) && keys[k] === 1) {
+          keys[k] = 0;
+          ws.send(JSON.stringify({ type: "input", keys }));
         }
       });
 
@@ -122,9 +135,15 @@
       function loop() {
         ctx.clearRect(0, 0, c.width, c.height);
         for (const id in players) {
-          const p = players[id];
-          ctx.fillStyle = p.color;
-          ctx.fillRect(p.x, p.y, 20, 20);
+          if (!p.displayX) p.displayX = p.x;
+          if (!p.displayY) p.displayY = p.y;
+
+          const lerp = 0.2; // 0 = no movement, 1 = instant snap
+          p.displayX += (p.x - p.displayX) * lerp;
+          p.displayY += (p.y - p.displayY) * lerp;
+
+          ctx.fillStyle = id === myId ? "hotpink" : p.color;
+          ctx.fillRect(p.displayX, p.displayY, 20, 20);
         }
         requestAnimationFrame(loop);
       }
