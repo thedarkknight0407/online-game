@@ -135,6 +135,7 @@
       function loop() {
         ctx.clearRect(0, 0, c.width, c.height);
         for (const id in players) {
+          const p = players[id];
           if (!p.displayX) p.displayX = p.x;
           if (!p.displayY) p.displayY = p.y;
 
