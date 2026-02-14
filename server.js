@@ -5,10 +5,6 @@ const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
 const rooms = {};
-const SPEED = 5;
-// let velY = 0;
-// let jump = 20;
-const TICK_RATE = 30; // 30 updates per second
 
 wss.on("connection", (ws) => {
   ws.id = Math.random().toString(36).slice(2);
@@ -26,88 +22,119 @@ wss.on("connection", (ws) => {
       rooms[data.roomId] = {
         password: data.password,
         clients: [ws],
-        players: {
-          [ws.id]: {
-            x: 200,
-            y: 200,
-            role: "host",
-            color: give_color(),
-            velY: 0,
-            jump: 10,
-            frame: 0,
-            frameTimer: 0,
-          }, // assign host role
-        },
-      };
-      ws.roomId = data.roomId;
-      ws.send(
-        JSON.stringify({
-          type: "hosted",
-          id: ws.id,
-        }),
-      );
+        board: [
+          [null, null, null],
+          [null, null, null],
+          [null, null, null],
+        ],
 
-      // send initial state
-      ws.send(
-        JSON.stringify({
-          type: "state",
-          players: rooms[data.roomId].players,
-        }),
-      );
+        moveHistory: [],
+        currentTurn: ws.id,
+        winner: null,
+        players: {
+          [ws.id]: { role: "host", symbol: null },
+        },
+        scores: {},
+        winningLine: null,
+      };
+
+      ws.roomId = data.roomId;
+
+      ws.send(JSON.stringify({ type: "hosted", id: ws.id }));
+
+      broadcastRoom(rooms[data.roomId]);
+      return;
     }
 
     // JOIN
     if (data.type === "join") {
       const room = rooms[data.roomId];
-      if (!room || room.password !== data.password) {
-        ws.send(
-          JSON.stringify({
-            type: "error",
-            msg: "Wrong room or password",
-          }),
-        );
+
+      if (!room) {
+        ws.send(JSON.stringify({ type: "error", msg: "Room not found" }));
+        return;
+      }
+
+      if (room.password !== data.password) {
+        ws.send(JSON.stringify({ type: "error", msg: "Wrong password" }));
         return;
       }
 
       room.clients.push(ws);
-      room.players[ws.id] = {
-        x: 350,
-        y: 200,
-        role: "guest",
-        color: give_color(),
-        velY: 0,
-        jump: 10,
-        frame: 0,
-        frameTimer: 0,
-      }; // assign guest role
       ws.roomId = data.roomId;
 
-      ws.send(
-        JSON.stringify({
-          type: "joined",
-          id: ws.id,
-        }),
-      );
+      const hostId = Object.keys(room.players)[0];
+      const guestId = ws.id;
 
-      // broadcast updated state to everyone
-      room.clients.forEach((c) => {
-        c.send(
-          JSON.stringify({
-            type: "state",
-            players: room.players,
-          }),
-        );
-      });
+      const random = Math.random() < 0.5;
+      room.scores[hostId] = 0;
+      room.scores[guestId] = 0;
+      if (random) {
+        room.players[hostId].symbol = "X";
+        room.players[guestId] = { role: "guest", symbol: "O" };
+        room.currentTurn = hostId;
+      } else {
+        room.players[hostId].symbol = "O";
+        room.players[guestId] = { role: "guest", symbol: "X" };
+        room.currentTurn = guestId;
+      }
+
+      ws.send(JSON.stringify({ type: "joined", id: ws.id }));
+
+      broadcastRoom(room);
+      return;
     }
 
-    // INPUT
-    if (data.type === "input") {
+    // MOVE
+    if (data.type === "move") {
       const room = rooms[ws.roomId];
-      if (!room) return;
-      const p = room.players[ws.id];
-      if (!p) return;
+      if (!room || room.winner) return;
 
-      p.keys = data.keys || {};
+      const { row, col } = data;
+      const playerId = ws.id;
+
+      if (room.currentTurn !== playerId) return;
+      if (room.board[row][col] !== null) return;
+
+      room.board[row][col] = playerId;
+      room.moveHistory.push({ playerId, row, col });
+
+      const ids = Object.keys(room.players);
+      room.currentTurn = ids.find((id) => id !== playerId);
+
+      const winningLine = checkWin(room.board, playerId);
+
+      if (winningLine) {
+        room.winner = playerId;
+        room.winningLine = winningLine;
+        room.scores[playerId]++;
+
+        // auto reset after 2 seconds
+        setTimeout(() => {
+          room.board = [
+            [null, null, null],
+            [null, null, null],
+            [null, null, null],
+          ];
+          room.moveHistory = [];
+          room.winner = null;
+          room.winningLine = null;
+
+          // X always starts next round
+          const ids = Object.keys(room.players);
+          const xPlayer = ids.find((id) => room.players[id].symbol === "X");
+          room.currentTurn = xPlayer;
+
+          broadcastRoom(room);
+        }, 2000);
+      }
+
+      if (!room.winner && isBoardFull(room.board)) {
+        undoOldestMove(room);
+      }
+
+      broadcastRoom(room);
+      return;
     }
   });
 
@@ -120,55 +147,94 @@ wss.on("connection", (ws) => {
   });
 });
 
-setInterval(() => {
-  for (const roomId in rooms) {
-    const room = rooms[roomId];
-    for (const id in room.players) {
-      const p = room.players[id];
-      const k = p.keys || {};
-      if (k.w) p.y -= SPEED;
-      if (k.s) p.y += SPEED;
-      if (k.a) p.x -= SPEED;
-      if (k.d) p.x += SPEED;
-      if (k.sp) {
-        p.velY = -p.jump;
-        k.sp = 0;
-      }
+function isBoardFull(board) {
+  return board.flat().every((cell) => cell !== null);
+}
 
-      p.x = Math.max(0, Math.min(580, p.x));
-      p.y = Math.max(0, Math.min(380, p.y));
-      gravity(p);
-      onGround(p);
+function checkWin(board, playerId) {
+  const lines = [
+    // rows
+    [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+    ],
+    [
+      [1, 0],
+      [1, 1],
+      [1, 2],
+    ],
+    [
+      [2, 0],
+      [2, 1],
+      [2, 2],
+    ],
+    // cols
+    [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+    ],
+    [
+      [0, 1],
+      [1, 1],
+      [2, 1],
+    ],
+    [
+      [0, 2],
+      [1, 2],
+      [2, 2],
+    ],
+    // diagonals
+    [
+      [0, 0],
+      [1, 1],
+      [2, 2],
+    ],
+    [
+      [0, 2],
+      [1, 1],
+      [2, 0],
+    ],
+  ];
+
+  for (let line of lines) {
+    if (line.every(([r, c]) => board[r][c] === playerId)) {
+      return line; // return winning cells
     }
-
-    // Broadcast positions
-    room.clients.forEach((c) => {
-      c.send(JSON.stringify({ type: "state", players: room.players }));
-    });
   }
-}, 1000 / TICK_RATE);
 
-function gravity(player) {
-  let accY = -1;
-  player.velY -= accY;
-  player.y += player.velY;
+  return null;
 }
 
-function onGround(player) {
-  if (player.y > 380) {
-    player.y = 380;
-    player.velY = 0;
-  }
+function undoOldestMove(room) {
+  if (room.moveHistory.length === 0) return;
+
+  const oldest = room.moveHistory.shift();
+
+  room.board[oldest.row][oldest.col] = "UNDO";
+  broadcastRoom(room);
+
+  setTimeout(() => {
+    room.board[oldest.row][oldest.col] = null;
+    broadcastRoom(room);
+  }, 500);
 }
 
-function give_color() {
-  const letter = "0123456ABCDEF";
-  return_v = "#";
-  for (let i = 0; i < 6; i++) {
-    return_v += letter.charAt(Math.floor(Math.random() * letter.length));
-  }
-
-  return return_v;
+function broadcastRoom(room) {
+  room.clients.forEach((c) => {
+    c.send(
+      JSON.stringify({
+        type: "gameState",
+        board: room.board,
+        currentTurn: room.currentTurn,
+        winner: room.winner,
+        players: room.players,
+        winningLine: room.winningLine,
+        scores: room.scores,
+      }),
+    );
+  });
 }
 
 server.listen(8080, () => {

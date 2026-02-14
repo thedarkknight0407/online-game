@@ -32,7 +32,7 @@
       <button onclick="join()">Join</button>
     </div>
 
-    <canvas id="c" width="600" height="400" style="display: none"></canvas>
+    <canvas id="c" width="400" height="400" style="display: none"></canvas>
 
     <script>
       const c = document.getElementById("c");
@@ -42,6 +42,12 @@
       let ws;
       let players = {};
       let myId = null;
+      let board = [];
+      let currentTurn = null;
+      let winner = null;
+      let winningLine = null;
+      let flash = 0;
+      let scores = {};
 
       // Helper to get server URL from query
       function getServerURL() {
@@ -98,9 +104,18 @@
         if (data.type === "hosted") myId = data.id;
         if (data.type === "joined") myId = data.id;
 
-        if (data.type === "state") {
+        if (data.type === "gameState") {
+          board = data.board;
+          currentTurn = data.currentTurn;
+          winner = data.winner;
           players = data.players;
-          if (c.style.display === "none") startGame(); // auto-start when state received
+          scores = data.scores || scores;
+
+          winningLine = data.winningLine;
+
+          if (c.style.display === "none") {
+            startGame();
+          }
         }
 
         if (data.type === "error") alert(data.msg);
@@ -146,65 +161,118 @@
         ws.send(JSON.stringify({ type: "input", keys }));
       }
 
-      // Render loop
-      function loop() {
-        ctx.clearRect(0, 0, c.width, c.height);
-
-        for (let i = 1; i < 4; i++) {
-          ctx.fillRect(90 + (i * 400) / 3, 0, 10, 400);
-          ctx.fillStyle = "hotpink";
-        }
-
-        // for (const id in players) {
-        //   const p = players[id];
-        //   if (!p.displayX) p.displayX = p.x;
-        //   if (!p.displayY) p.displayY = p.y;
-
-        //   const lerp = 0.2; // 0 = no movement, 1 = instant snap
-        //   p.displayX += (p.x - p.displayX) * lerp;
-        //   p.displayY += (p.y - p.displayY) * lerp;
-
-        //   //   ctx.fillStyle = id === myId ? "hotpink" : p.color;
-        //   //   ctx.fillRect(p.displayX, p.displayY, 20, 20);
-
-        //   //   if (p.frame === undefined) {
-        //   //     p.frame = 0;
-        //   //     p.frameTimer = 0;
-        //   //   }
-
-        //   p.frameTimer++;
-        //   if (p.frameTimer >= 10) {
-        //     // speed of animation
-        //     p.frame = (p.frame + 1) % 4; // number of frames
-        //     p.frameTimer = 0;
-        //   }
-
-        //   console.log(p.frame);
-        //   const sx = p.frame * frameWidth;
-        //   const sy = 0; // change row if you have multiple animations
-
-        //   drawSprite(p.displayX, p.displayY, sx, sy);
-        // }
-        requestAnimationFrame(loop);
+      function getMousePosition(canvas, event) {
+        const rect = canvas.getBoundingClientRect(); // Get canvas position and size
+        return {
+          x: event.clientX - rect.left, // Adjust event.clientX for canvas's left offset
+          y: event.clientY - rect.top, // Adjust event.clientY for canvas's top offset
+        };
       }
 
-      function drawSprite(x, y, sx, sy) {
-        // spriteSheet.onload = () => {
-        // const sx = (frameIndex % framesPerRow) * frameWidth;
-        // const sy = Math.floor(frameIndex / framesPerRow) * frameHeight;
+      // Render loop
+      c.addEventListener("click", function (event) {
+        if (!ws || ws.readyState !== 1) return;
+        if (winner) return;
 
-        ctx.drawImage(
-          spriteSheet,
-          sx,
-          sy,
-          frameWidth,
-          frameHeight,
-          x,
-          y - 36,
-          48,
-          48,
+        const mousePos = getMousePosition(c, event);
+        const row = Math.floor(mousePos.y / (400 / 3));
+        const col = Math.floor(mousePos.x / (400 / 3));
+
+        ws.send(
+          JSON.stringify({
+            type: "move",
+            row,
+            col,
+          }),
         );
-        // };
+      });
+
+      function loop() {
+        ctx.clearRect(0, 0, c.width, c.height);
+        flash += 0.1;
+
+        if (!board || board.length !== 3) {
+          requestAnimationFrame(loop);
+          return;
+        }
+
+        ctx.fillStyle = "white";
+        for (let i = 1; i < 3; i++) {
+          ctx.fillRect((i * 400) / 3, 0, 10, 400);
+          ctx.fillRect(0, (i * 400) / 3, 400, 10);
+        }
+
+        ctx.fillStyle = "white";
+        for (let r = 0; r < 3; r++) {
+          for (let c2 = 0; c2 < 3; c2++) {
+            const cell = board[r][c2];
+
+            if (cell !== null) {
+              if (cell === "UNDO") {
+                ctx.fillStyle = `rgba(255,255,255,${Math.abs(Math.sin(flash * 5))})`;
+                ctx.fillRect(c2 * (400 / 3), r * (400 / 3), 400 / 3, 400 / 3);
+              } else {
+                const symbol = players[cell]?.symbol;
+
+                ctx.fillStyle = symbol === "X" ? "#ff4c4c" : "#4ccfff";
+                ctx.font = "bold 100px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+
+                ctx.fillText(
+                  symbol,
+                  c2 * (400 / 3) + 400 / 6,
+                  r * (400 / 3) + 400 / 6,
+                );
+              }
+            }
+          }
+        }
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText(
+          currentTurn === myId ? "Your Turn" : "Opponent's Turn",
+          200,
+          380,
+        );
+
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.textAlign = "left";
+
+        if (players[myId]) {
+          const opponentId = Object.keys(players).find((id) => id !== myId);
+
+          const mySymbol = players[myId]?.symbol;
+          const oppSymbol = players[opponentId]?.symbol;
+
+          ctx.fillText(`${mySymbol}: ${scores[myId] || 0}`, 10, 20);
+
+          ctx.fillText(`${oppSymbol}: ${scores[opponentId] || 0}`, 10, 45);
+        }
+
+        if (winningLine) {
+          ctx.strokeStyle = `rgba(255,255,0,${Math.abs(Math.sin(flash))})`;
+          ctx.lineWidth = 15;
+          ctx.lineCap = "round";
+
+          const [start, , end] = winningLine;
+
+          const cellSize = 400 / 3;
+
+          ctx.beginPath();
+          ctx.moveTo(
+            start[1] * cellSize + cellSize / 2,
+            start[0] * cellSize + cellSize / 2,
+          );
+          ctx.lineTo(
+            end[1] * cellSize + cellSize / 2,
+            end[0] * cellSize + cellSize / 2,
+          );
+          ctx.stroke();
+        }
+
+        requestAnimationFrame(loop);
       }
     </script>
   </body>
