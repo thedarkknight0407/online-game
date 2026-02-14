@@ -150,8 +150,8 @@
       function loop() {
         ctx.clearRect(0, 0, c.width, c.height);
 
-        for (let i = 0; i < 3; i++) {
-          ctx.fillRect(100 + ((i + 1) * 400) / 3, 0, 10, 400);
+        for (let i = 1; i < 4; i++) {
+          ctx.fillRect(90 + (i * 400) / 3, 0, 10, 400);
           ctx.fillStyle = "hotpink";
         }
 
