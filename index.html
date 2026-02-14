@@ -60,6 +60,7 @@
       function host() {
         const password = getPassword();
         const roomId = randomRoom();
+
         document.getElementById("room").value = roomId;
         alert("Room code: " + roomId + "\nShare this with your friend");
 
@@ -112,12 +113,15 @@
       }
 
       // Keyboard input
-      const keys = { w: 0, a: 0, s: 0, d: 0 };
+      const keys = { w: 0, a: 0, s: 0, d: 0, sp: 0 };
 
       document.addEventListener("keydown", (e) => {
         if (!ws || ws.readyState !== 1) return;
         const k = e.key.toLowerCase();
-        if (keys.hasOwnProperty(k) && keys[k] === 0) {
+        if (k == " " && keys["sp"] === 0) {
+          keys["sp"] = 1;
+          sendKeys();
+        } else if (keys.hasOwnProperty(k) && keys[k] === 0) {
           keys[k] = 1;
           //   ws.send(JSON.stringify({ type: "input", keys }));
           sendKeys();
@@ -127,7 +131,10 @@
       document.addEventListener("keyup", (e) => {
         if (!ws || ws.readyState !== 1) return;
         const k = e.key.toLowerCase();
-        if (keys.hasOwnProperty(k) && keys[k] === 1) {
+        if (k == " " && keys["sp"] === 1) {
+          keys["sp"] = 0;
+          sendKeys();
+        } else if (keys.hasOwnProperty(k) && keys[k] === 1) {
           keys[k] = 0;
           //   ws.send(JSON.stringify({ type: "input", keys }));
           sendKeys();
@@ -142,19 +149,62 @@
       // Render loop
       function loop() {
         ctx.clearRect(0, 0, c.width, c.height);
-        for (const id in players) {
-          const p = players[id];
-          if (!p.displayX) p.displayX = p.x;
-          if (!p.displayY) p.displayY = p.y;
 
-          const lerp = 0.2; // 0 = no movement, 1 = instant snap
-          p.displayX += (p.x - p.displayX) * lerp;
-          p.displayY += (p.y - p.displayY) * lerp;
-
-          ctx.fillStyle = id === myId ? "hotpink" : p.color;
-          ctx.fillRect(p.displayX, p.displayY, 20, 20);
+        for (let i = 0; i < 3; i++) {
+          ctx.fillRect(100 + ((i + 1) * 400) / 3, 0, 10, 400);
+          ctx.fillStyle = "hotpink";
         }
+
+        // for (const id in players) {
+        //   const p = players[id];
+        //   if (!p.displayX) p.displayX = p.x;
+        //   if (!p.displayY) p.displayY = p.y;
+
+        //   const lerp = 0.2; // 0 = no movement, 1 = instant snap
+        //   p.displayX += (p.x - p.displayX) * lerp;
+        //   p.displayY += (p.y - p.displayY) * lerp;
+
+        //   //   ctx.fillStyle = id === myId ? "hotpink" : p.color;
+        //   //   ctx.fillRect(p.displayX, p.displayY, 20, 20);
+
+        //   //   if (p.frame === undefined) {
+        //   //     p.frame = 0;
+        //   //     p.frameTimer = 0;
+        //   //   }
+
+        //   p.frameTimer++;
+        //   if (p.frameTimer >= 10) {
+        //     // speed of animation
+        //     p.frame = (p.frame + 1) % 4; // number of frames
+        //     p.frameTimer = 0;
+        //   }
+
+        //   console.log(p.frame);
+        //   const sx = p.frame * frameWidth;
+        //   const sy = 0; // change row if you have multiple animations
+
+        //   drawSprite(p.displayX, p.displayY, sx, sy);
+        // }
         requestAnimationFrame(loop);
+      }
+
+      function drawSprite(x, y, sx, sy) {
+        // spriteSheet.onload = () => {
+        // const sx = (frameIndex % framesPerRow) * frameWidth;
+        // const sy = Math.floor(frameIndex / framesPerRow) * frameHeight;
+
+        ctx.drawImage(
+          spriteSheet,
+          sx,
+          sy,
+          frameWidth,
+          frameHeight,
+          x,
+          y - 36,
+          48,
+          48,
+        );
+        // };
       }
     </script>
   </body>

@@ -6,6 +6,8 @@ const wss = new WebSocket.Server({ server });
 
 const rooms = {};
 const SPEED = 5;
+// let velY = 0;
+// let jump = 20;
 const TICK_RATE = 30; // 30 updates per second
 
 wss.on("connection", (ws) => {
@@ -25,7 +27,16 @@ wss.on("connection", (ws) => {
         password: data.password,
         clients: [ws],
         players: {
-          [ws.id]: { x: 200, y: 200, role: "host", color: give_color() }, // assign host role
+          [ws.id]: {
+            x: 200,
+            y: 200,
+            role: "host",
+            color: give_color(),
+            velY: 0,
+            jump: 10,
+            frame: 0,
+            frameTimer: 0,
+          }, // assign host role
         },
       };
       ws.roomId = data.roomId;
@@ -64,6 +75,10 @@ wss.on("connection", (ws) => {
         y: 200,
         role: "guest",
         color: give_color(),
+        velY: 0,
+        jump: 10,
+        frame: 0,
+        frameTimer: 0,
       }; // assign guest role
       ws.roomId = data.roomId;
 
@@ -93,25 +108,6 @@ wss.on("connection", (ws) => {
       if (!p) return;
 
       p.keys = data.keys || {};
-      // const keys = data.keys || {};
-      // if (keys.w) p.y -= SPEED;
-      // if (keys.s) p.y += SPEED;
-      // if (keys.a) p.x -= SPEED;
-      // if (keys.d) p.x += SPEED;
-
-      // // Clamp inside canvas
-      // p.x = Math.max(0, Math.min(580, p.x));
-      // p.y = Math.max(0, Math.min(380, p.y));
-
-      // // Broadcast updated positions
-      // room.clients.forEach((c) => {
-      //   c.send(
-      //     JSON.stringify({
-      //       type: "state",
-      //       players: room.players,
-      //     }),
-      //   );
-      // });
     }
   });
 
@@ -121,17 +117,6 @@ wss.on("connection", (ws) => {
     delete room.players[ws.id];
     room.clients = room.clients.filter((c) => c !== ws);
     if (room.clients.length === 0) delete rooms[ws.roomId];
-    // else {
-    //   // update remaining clients
-    //   room.clients.forEach((c) => {
-    //     c.send(
-    //       JSON.stringify({
-    //         type: "state",
-    //         players: room.players,
-    //       }),
-    //     );
-    //   });
-    // }
   });
 });
 
@@ -145,9 +130,15 @@ setInterval(() => {
       if (k.s) p.y += SPEED;
       if (k.a) p.x -= SPEED;
       if (k.d) p.x += SPEED;
+      if (k.sp) {
+        p.velY = -p.jump;
+        k.sp = 0;
+      }
 
       p.x = Math.max(0, Math.min(580, p.x));
       p.y = Math.max(0, Math.min(380, p.y));
+      gravity(p);
+      onGround(p);
     }
 
     // Broadcast positions
@@ -156,6 +147,19 @@ setInterval(() => {
     });
   }
 }, 1000 / TICK_RATE);
+
+function gravity(player) {
+  let accY = -1;
+  player.velY -= accY;
+  player.y += player.velY;
+}
+
+function onGround(player) {
+  if (player.y > 380) {
+    player.y = 380;
+    player.velY = 0;
+  }
+}
 
 function give_color() {
   const letter = "0123456ABCDEF";
